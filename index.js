@@ -11,7 +11,12 @@ console.log("CHANNEL_ID:", CHANNEL_ID ? "✅ Found" : "❌ Missing");
 
 async function getTokenInfo(mint) {
   try {
-    const res = await axios.get(`https://api.dexscreener.com/latest/dex/tokens/${mint}`);
+    async function getTokenInfo(mint) {
+  try {
+    const res = await axios.get(
+      `https://api.dexscreener.com/latest/dex/tokens/${mint}`,
+      { timeout: 3000 }
+    );
     const pair = res.data?.pairs?.[0];
     if (!pair) return null;
     return {
