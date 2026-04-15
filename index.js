@@ -49,7 +49,11 @@ app.post("/webhook", async (req, res) => {
       const signature = tx.signature || "";
 
       console.log("TX type:", type);
-      if (type !== "SWAP") continue;
+if (type !== "SWAP") continue;
+
+console.log("feePayer:", wallet);
+console.log("tokenTransfers:", JSON.stringify(tx.tokenTransfers));
+console.log("nativeTransfers:", JSON.stringify(tx.nativeTransfers));
 
       const transfers = tx.tokenTransfers || [];
       const nativeTransfers = tx.nativeTransfers || [];
