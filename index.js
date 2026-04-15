@@ -13,9 +13,27 @@ console.log("CHANNEL_ID:", CHANNEL_ID ? "✅ Found" : "❌ Missing");
 const MIN_SOL = 0.01; // minimum SOL untuk notif
 const WALLETS = process.env.WALLETS ? process.env.WALLETS.split(",") : [];
 
-// PnL tracker — simpan history beli per token per wallet
-const pnlTracker = {}; // { wallet_mint: { totalSOL, totalToken } }
+const fs = require("fs");
+const PNL_FILE = "./pnl_data.json";
 
+// Load PnL data dari file kalau ada
+let pnlTracker = {};
+try {
+  if (fs.existsSync(PNL_FILE)) {
+    pnlTracker = JSON.parse(fs.readFileSync(PNL_FILE, "utf8"));
+    console.log("✅ PnL data loaded:", Object.keys(pnlTracker).length, "positions");
+  }
+} catch {
+  console.log("No PnL data found, starting fresh");
+}
+
+function savePnL() {
+  try {
+    fs.writeFileSync(PNL_FILE, JSON.stringify(pnlTracker, null, 2));
+  } catch (err) {
+    console.error("Failed to save PnL:", err.message);
+  }
+}
 async function getTokenInfo(mint) {
   try {
     const res = await axios.get(
@@ -149,8 +167,9 @@ app.post("/webhook", async (req, res) => {
           pnlTracker[pnlKey] = { totalSOLSpent: 0, totalTokenBought: 0 };
         }
         pnlTracker[pnlKey].totalSOLSpent += solAmount;
-        pnlTracker[pnlKey].totalTokenBought += tokenAmount;
-        console.log(`BUY tracked: ${pnlKey} | SOL: ${pnlTracker[pnlKey].totalSOLSpent} | Token: ${pnlTracker[pnlKey].totalTokenBought}`);
+pnlTracker[pnlKey].totalTokenBought += tokenAmount;
+console.log(`BUY tracked: ${pnlKey} | SOL: ${pnlTracker[pnlKey].totalSOLSpent} | Token: ${pnlTracker[pnlKey].totalTokenBought}`);
+savePnL();
 
       } else {
         // Hitung PnL saat SELL
@@ -171,8 +190,9 @@ app.post("/webhook", async (req, res) => {
           // Update sisa posisi
           pnlTracker[pnlKey].totalTokenBought -= tokenAmount;
           if (pnlTracker[pnlKey].totalTokenBought <= 0) {
-            delete pnlTracker[pnlKey]; // posisi habis
-          }
+  delete pnlTracker[pnlKey];
+}
+savePnL();
         }
       }
 
