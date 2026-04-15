@@ -204,9 +204,9 @@ app.post("/webhook", async function(req, res) {
       const inlineKeyboard = {
         inline_keyboard: [
           [
-            { text: "Trojan WEB", url: "https://t.me/solana_trojanbot?start=r-" + tokenMint },
+            { text: "🐴 Trojan WEB", url: "https://t.me/solana_trojanbot?start=r-" + tokenMint },
             { text: "Padre: " + tokenName, url: "https://t.me/padre_bot?start=" + tokenMint },
-            { text: "GMGN: " + tokenName, url: "https://gmgn.ai/sol/token/" + tokenMint },
+            { text: "🦅 GMGN: " + tokenName, url: "https://gmgn.ai/sol/token/" + tokenMint },
           ],
           [
             { text: "AXIOM: " + tokenName, url: "https://axiom.trade/t/" + tokenMint },
