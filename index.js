@@ -87,20 +87,32 @@ app.post("/webhook", async (req, res) => {
         }
       }
 
-      // Cek token direction
-      for (const tt of transfers) {
-        const isSOL = tt.mint === "So11111111111111111111111111111111111111112";
-        if (isSOL) continue;
-        if (tt.toUserAccount === mainWallet) {
-          isBuy = true;
-          tokenMint = tt.mint;
-          tokenAmount = tt.tokenAmount;
-        } else if (tt.fromUserAccount === mainWallet) {
-          isBuy = false;
-          tokenMint = tt.mint;
-          tokenAmount = tt.tokenAmount;
-        }
-      }
+     // Cek token direction — jumlahkan semua transfer
+const tokenIn = {};  // mint -> total masuk
+const tokenOut = {}; // mint -> total keluar
+
+for (const tt of transfers) {
+  const isSOL = tt.mint === "So11111111111111111111111111111111111111112";
+  if (isSOL) continue;
+  if (tt.toUserAccount === mainWallet) {
+    tokenIn[tt.mint] = (tokenIn[tt.mint] || 0) + tt.tokenAmount;
+  }
+  if (tt.fromUserAccount === mainWallet) {
+    tokenOut[tt.mint] = (tokenOut[tt.mint] || 0) + tt.tokenAmount;
+  }
+}
+
+// Tentukan token utama dan arah transaksi
+if (Object.keys(tokenIn).length > 0) {
+  isBuy = true;
+  // Ambil token dengan jumlah terbesar
+  tokenMint = Object.keys(tokenIn).reduce((a, b) => tokenIn[a] > tokenIn[b] ? a : b);
+  tokenAmount = tokenIn[tokenMint];
+} else if (Object.keys(tokenOut).length > 0) {
+  isBuy = false;
+  tokenMint = Object.keys(tokenOut).reduce((a, b) => tokenOut[a] > tokenOut[b] ? a : b);
+  tokenAmount = tokenOut[tokenMint];
+}
 
       if (!tokenMint) continue;
 
