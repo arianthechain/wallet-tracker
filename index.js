@@ -69,10 +69,25 @@ app.post("/webhook", async (req, res) => {
         }
       }
 
-      // Cek SOL direction
-      for (const nt of nativeTransfers) {
-        if (nt.fromUserAccount === mainWallet) solAmount += nt.amount / 1e9;
-      }
+     // Cek SOL dari nativeTransfers
+for (const nt of nativeTransfers) {
+  if (nt.fromUserAccount === mainWallet) solAmount += nt.amount / 1e9;
+}
+
+// Cek SOL dari tokenTransfers (wrapped SOL)
+for (const tt of transfers) {
+  const isSOL = tt.mint === "So11111111111111111111111111111111111111112";
+  if (!isSOL) continue;
+  if (tt.fromUserAccount === mainWallet) solAmount += tt.tokenAmount;
+}
+
+// Kalau masih 0, coba ambil dari semua nativeTransfers yang masuk ke DEX
+if (solAmount === 0) {
+  for (const nt of nativeTransfers) {
+    if (nt.fromUserAccount !== mainWallet && nt.toUserAccount !== mainWallet) continue;
+    if (nt.fromUserAccount === mainWallet) solAmount += nt.amount / 1e9;
+  }
+}
 
       // Cek token direction
       for (const tt of transfers) {
