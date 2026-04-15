@@ -9,7 +9,7 @@ const CHANNEL_ID = process.env.CHANNEL_ID;
 console.log("BOT_TOKEN:", BOT_TOKEN ? "✅ Found" : "❌ Missing");
 console.log("CHANNEL_ID:", CHANNEL_ID ? "✅ Found" : "❌ Missing");
 
-    async function getTokenInfo(mint) {
+async function getTokenInfo(mint) {
   try {
     const res = await axios.get(
       `https://api.dexscreener.com/latest/dex/tokens/${mint}`,
@@ -49,11 +49,7 @@ app.post("/webhook", async (req, res) => {
       const signature = tx.signature || "";
 
       console.log("TX type:", type);
-if (type !== "SWAP") continue;
-
-console.log("feePayer:", wallet);
-console.log("tokenTransfers:", JSON.stringify(tx.tokenTransfers));
-console.log("nativeTransfers:", JSON.stringify(tx.nativeTransfers));
+      if (type !== "SWAP") continue;
 
       const transfers = tx.tokenTransfers || [];
       const nativeTransfers = tx.nativeTransfers || [];
@@ -63,38 +59,35 @@ console.log("nativeTransfers:", JSON.stringify(tx.nativeTransfers));
       let tokenAmount = 0;
       let isBuy = false;
 
-      // Cari wallet utama dari tokenTransfers (bukan feePayer)
-let mainWallet = wallet;
-for (const tt of transfers) {
-  const isSOL = tt.mint === "So11111111111111111111111111111111111111112";
-  if (!isSOL) {
-    mainWallet = tt.toUserAccount || tt.fromUserAccount;
-    break;
-  }
-}
+      // Cari wallet utama dari tokenTransfers
+      let mainWallet = wallet;
+      for (const tt of transfers) {
+        const isSOL = tt.mint === "So11111111111111111111111111111111111111112";
+        if (!isSOL) {
+          mainWallet = tt.toUserAccount || tt.fromUserAccount;
+          break;
+        }
+      }
 
-// Cek SOL direction
-for (const nt of nativeTransfers) {
-  if (nt.fromUserAccount === mainWallet) solAmount += nt.amount / 1e9;
-}
+      // Cek SOL direction
+      for (const nt of nativeTransfers) {
+        if (nt.fromUserAccount === mainWallet) solAmount += nt.amount / 1e9;
+      }
 
-// Cek token direction
-for (const tt of transfers) {
-  const isSOL = tt.mint === "So11111111111111111111111111111111111111112";
-  if (isSOL) continue;
-  if (tt.toUserAccount === mainWallet) {
-    isBuy = true;
-    tokenMint = tt.mint;
-    tokenAmount = tt.tokenAmount;
-  } else if (tt.fromUserAccount === mainWallet) {
-    isBuy = false;
-    tokenMint = tt.mint;
-    tokenAmount = tt.tokenAmount;
-  }
-}
-
-console.log("mainWallet:", mainWallet);
-console.log("isBuy:", isBuy, "tokenMint:", tokenMint, "solAmount:", solAmount);
+      // Cek token direction
+      for (const tt of transfers) {
+        const isSOL = tt.mint === "So11111111111111111111111111111111111111112";
+        if (isSOL) continue;
+        if (tt.toUserAccount === mainWallet) {
+          isBuy = true;
+          tokenMint = tt.mint;
+          tokenAmount = tt.tokenAmount;
+        } else if (tt.fromUserAccount === mainWallet) {
+          isBuy = false;
+          tokenMint = tt.mint;
+          tokenAmount = tt.tokenAmount;
+        }
+      }
 
       if (!tokenMint) continue;
 
@@ -104,38 +97,42 @@ console.log("isBuy:", isBuy, "tokenMint:", tokenMint, "solAmount:", solAmount);
       const tokenPrice = tokenInfo?.price || 0;
       const marketCap = tokenInfo?.mc || 0;
       const dexName = (tokenInfo?.dex || "DEX").toUpperCase();
-      const pairAddress = tokenInfo?.pairAddress || tokenMint;
 
       const tokenUSDValue = (tokenAmount * tokenPrice).toFixed(2);
-      const shortWallet = wallet.slice(0, 4) + "..." + wallet.slice(-4);
+      const shortWallet = mainWallet.slice(0, 6) + "..." + mainWallet.slice(-4);
+      const solscanTx = `https://solscan.io/tx/${signature}`;
+      const solscanWallet = `https://solscan.io/account/${mainWallet}?exclude_amount_zero=true&remove_spam=true#transfers`;
+      const solscanSOL = `https://solscan.io/token/So11111111111111111111111111111111111111112`;
+      const solscanToken = `https://solscan.io/token/${tokenMint}`;
 
       const emoji = isBuy ? "🟢" : "🔴";
       const action = isBuy ? "BUY" : "SELL";
-      const swapText = isBuy
-        ? `swapped *${solAmount.toFixed(4)} SOL* for *${tokenAmount.toLocaleString()}* (*$${tokenUSDValue}*) ${tokenName}\n@$${tokenPrice.toFixed(6)}`
-        : `swapped *${tokenAmount.toLocaleString()}* (*$${tokenUSDValue}*) ${tokenName} for *${solAmount.toFixed(4)} SOL*\n@$${tokenPrice.toFixed(6)}`;
+
+      const swapLine = isBuy
+        ? `<a href="${solscanWallet}">${shortWallet}</a> swapped <b>${solAmount.toFixed(4)} <a href="${solscanSOL}">SOL</a></b> for <b>${tokenAmount.toLocaleString()} ($${tokenUSDValue}) <a href="${solscanToken}">${tokenName}</a></b> @$${tokenPrice.toFixed(6)}`
+        : `<a href="${solscanWallet}">${shortWallet}</a> swapped <b>${tokenAmount.toLocaleString()} ($${tokenUSDValue}) <a href="${solscanToken}">${tokenName}</a></b> for <b>${solAmount.toFixed(4)} <a href="${solscanSOL}">SOL</a></b> @$${tokenPrice.toFixed(6)}`;
 
       const message =
-`${emoji} *${action} ${tokenName} on ${dexName}*
-💠 ${shortWallet}
+`${emoji} <a href="${solscanTx}"><b>${action} ${tokenName}</b></a> on ${dexName}
+🔹 <a href="${solscanWallet}">${shortWallet}</a>
 
-💠 \`${shortWallet}\` ${swapText}
+🔹${swapLine}
 
-🪙 *#${tokenSymbol}* | MC: ${formatUSD(marketCap)} | [INFO](https://dexscreener.com/solana/${pairAddress})
-\`${tokenMint}\``;
+💊 <b>#${tokenSymbol}</b> | MC: ${formatUSD(marketCap)} | <a href="https://birdeye.so/token/${tokenMint}?chain=solana">BE</a> | <a href="https://dexscreener.com/solana/${tokenMint}">DS</a> | <a href="https://photon-sol.tinyastro.io/en/r/@RayBot/${tokenMint}">PH</a> | <a href="https://neo.bullx.io/terminal?chainId=1399811149&address=${tokenMint}">Bullx</a> | <a href="https://gmgn.ai/sol/token/${tokenMint}">GMGN</a> | <a href="https://axiom.trade/t/${tokenMint}">AXI</a> | <a href="https://t.me/solana_notify_bot?start=t__${tokenMint}">👥INFO</a>
+<code>${tokenMint}</code>`;
 
       // Inline buttons
       const inlineKeyboard = {
         inline_keyboard: [
           [
-            { text: "🦅 GMGN", url: `https://gmgn.ai/sol/token/${tokenMint}` },
-            { text: "📊 DexScreener", url: `https://dexscreener.com/solana/${pairAddress}` },
-            { text: "🪐 Jupiter", url: `https://jup.ag/swap/SOL-${tokenMint}` },
+            { text: "🐴 Trojan WEB", url: `https://t.me/solana_trojanbot?start=r-${tokenMint}` },
+            { text: `Padre: ${tokenName}`, url: `https://t.me/padre_bot?start=${tokenMint}` },
+            { text: `🦅 GMGN: ${tokenName}`, url: `https://gmgn.ai/sol/token/${tokenMint}` },
           ],
           [
-            { text: "🔱 Axiom", url: `https://axiom.trade/token/${tokenMint}` },
-            { text: "🍌 Bonk", url: `https://bonkbot.io/?token=${tokenMint}` },
-            { text: "🔗 Solscan", url: `https://solscan.io/tx/${signature}` },
+            { text: `AXIOM: ${tokenName}`, url: `https://axiom.trade/t/${tokenMint}` },
+            { text: `Trojan: ${tokenName}`, url: `https://t.me/solana_trojanbot?start=${tokenMint}` },
+            { text: `Bonk: ${tokenName}`, url: `https://bonkbot.io/?token=${tokenMint}` },
           ]
         ]
       };
@@ -145,7 +142,7 @@ console.log("isBuy:", isBuy, "tokenMint:", tokenMint, "solAmount:", solAmount);
       await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
         chat_id: CHANNEL_ID,
         text: message,
-        parse_mode: "Markdown",
+        parse_mode: "HTML",
         disable_web_page_preview: true,
         reply_markup: inlineKeyboard,
       });
