@@ -105,8 +105,8 @@ app.post("/webhook", async (req, res) => {
       const solscanSOL = `https://solscan.io/token/So11111111111111111111111111111111111111112`;
       const solscanToken = `https://solscan.io/token/${tokenMint}`;
 
-      const emoji = isBuy ? "🟢" : "🔴";
-      const action = isBuy ? "BUY" : "SELL";
+      const emoji = isBuy ? "🟢" : "🟢";
+      const action = "SWAP";
 
       const swapLine = isBuy
         ? `<a href="${solscanWallet}">${shortWallet}</a> swapped <b>${solAmount.toFixed(4)} <a href="${solscanSOL}">SOL</a></b> for <b>${tokenAmount.toLocaleString()} ($${tokenUSDValue}) <a href="${solscanToken}">${tokenName}</a></b> @$${tokenPrice.toFixed(6)}`
