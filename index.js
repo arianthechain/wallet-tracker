@@ -171,9 +171,12 @@ pnlTracker[pnlKey].totalTokenBought += tokenAmount;
 console.log(`BUY tracked: ${pnlKey} | SOL: ${pnlTracker[pnlKey].totalSOLSpent} | Token: ${pnlTracker[pnlKey].totalTokenBought}`);
 savePnL();
 
-      } else {
-        // Hitung PnL saat SELL
-        if (pnlTracker[pnlKey]) {
+     } else {
+  // Hitung PnL saat SELL
+  console.log("SELL detected, pnlKey:", pnlKey);
+  console.log("pnlTracker keys:", Object.keys(pnlTracker));
+  console.log("position found:", !!pnlTracker[pnlKey]);
+  if (pnlTracker[pnlKey]) {
           const position = pnlTracker[pnlKey];
           const avgBuyPrice = position.totalSOLSpent / position.totalTokenBought;
           const currentPrice = solAmount / tokenAmount;
