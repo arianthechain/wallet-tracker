@@ -104,6 +104,19 @@ app.post("/webhook", async (req, res) => {
 
       if (!tokenMint) continue;
 
+console.log("=== SWAP DEBUG ===");
+console.log("mainWallet:", mainWallet);
+console.log("isBuy:", isBuy);
+console.log("tokenMint:", tokenMint);
+console.log("tokenAmount:", tokenAmount);
+console.log("solAmount:", solAmount);
+console.log("all transfers:", JSON.stringify(transfers.map(t => ({
+  mint: t.mint?.slice(0,8),
+  from: t.fromUserAccount?.slice(0,8),
+  to: t.toUserAccount?.slice(0,8),
+  amount: t.tokenAmount
+}))));
+
       const tokenInfo = await getTokenInfo(tokenMint);
       const tokenName = tokenInfo?.name || "Unknown";
       const tokenSymbol = tokenInfo?.symbol || "???";
