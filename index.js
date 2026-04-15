@@ -9,8 +9,6 @@ const CHANNEL_ID = process.env.CHANNEL_ID;
 console.log("BOT_TOKEN:", BOT_TOKEN ? "✅ Found" : "❌ Missing");
 console.log("CHANNEL_ID:", CHANNEL_ID ? "✅ Found" : "❌ Missing");
 
-async function getTokenInfo(mint) {
-  try {
     async function getTokenInfo(mint) {
   try {
     const res = await axios.get(
