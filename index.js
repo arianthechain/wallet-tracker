@@ -63,25 +63,38 @@ console.log("nativeTransfers:", JSON.stringify(tx.nativeTransfers));
       let tokenAmount = 0;
       let isBuy = false;
 
-      // Cek SOL direction
-      for (const nt of nativeTransfers) {
-        if (nt.fromUserAccount === wallet) solAmount += nt.amount / 1e9;
-      }
+      // Cari wallet utama dari tokenTransfers (bukan feePayer)
+let mainWallet = wallet;
+for (const tt of transfers) {
+  const isSOL = tt.mint === "So11111111111111111111111111111111111111112";
+  if (!isSOL) {
+    mainWallet = tt.toUserAccount || tt.fromUserAccount;
+    break;
+  }
+}
 
-      // Cek token direction — BUY = terima token, SELL = kirim token
-      for (const tt of transfers) {
-        const isSOL = tt.mint === "So11111111111111111111111111111111111111112";
-        if (isSOL) continue;
-        if (tt.toUserAccount === wallet) {
-          isBuy = true;
-          tokenMint = tt.mint;
-          tokenAmount = tt.tokenAmount;
-        } else if (tt.fromUserAccount === wallet) {
-          isBuy = false;
-          tokenMint = tt.mint;
-          tokenAmount = tt.tokenAmount;
-        }
-      }
+// Cek SOL direction
+for (const nt of nativeTransfers) {
+  if (nt.fromUserAccount === mainWallet) solAmount += nt.amount / 1e9;
+}
+
+// Cek token direction
+for (const tt of transfers) {
+  const isSOL = tt.mint === "So11111111111111111111111111111111111111112";
+  if (isSOL) continue;
+  if (tt.toUserAccount === mainWallet) {
+    isBuy = true;
+    tokenMint = tt.mint;
+    tokenAmount = tt.tokenAmount;
+  } else if (tt.fromUserAccount === mainWallet) {
+    isBuy = false;
+    tokenMint = tt.mint;
+    tokenAmount = tt.tokenAmount;
+  }
+}
+
+console.log("mainWallet:", mainWallet);
+console.log("isBuy:", isBuy, "tokenMint:", tokenMint, "solAmount:", solAmount);
 
       if (!tokenMint) continue;
 
