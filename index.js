@@ -5,6 +5,10 @@ app.use(express.json());
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const CHANNEL_ID = process.env.CHANNEL_ID;
+const WATCHED_WALLETS = process.env.WATCHED_WALLETS
+  ? process.env.WATCHED_WALLETS.split(",").map(w => w.trim())
+  : [];
+console.log("WATCHED_WALLETS:", WATCHED_WALLETS);
 
 console.log("BOT_TOKEN:", BOT_TOKEN ? "✅ Found" : "❌ Missing");
 console.log("CHANNEL_ID:", CHANNEL_ID ? "✅ Found" : "❌ Missing");
@@ -59,15 +63,47 @@ app.post("/webhook", async (req, res) => {
       let tokenAmount = 0;
       let isBuy = false;
 
-      // Cari wallet utama
-      let mainWallet = wallet;
-      for (const tt of transfers) {
-        const isSOL = tt.mint === "So11111111111111111111111111111111111111112";
-        if (!isSOL) {
-          mainWallet = tt.toUserAccount || tt.fromUserAccount;
-          break;
-        }
-      }
+    // Cari wallet utama — harus dari WATCHED_WALLETS
+let mainWallet = null;
+
+// Cek apakah feePayer ada di watched wallets
+if (WATCHED_WALLETS.includes(wallet)) {
+  mainWallet = wallet;
+}
+
+// Cek dari transfers
+if (!mainWallet) {
+  for (const tt of transfers) {
+    if (WATCHED_WALLETS.includes(tt.toUserAccount)) {
+      mainWallet = tt.toUserAccount;
+      break;
+    }
+    if (WATCHED_WALLETS.includes(tt.fromUserAccount)) {
+      mainWallet = tt.fromUserAccount;
+      break;
+    }
+  }
+}
+
+// Cek dari nativeTransfers
+if (!mainWallet) {
+  for (const nt of nativeTransfers) {
+    if (WATCHED_WALLETS.includes(nt.fromUserAccount)) {
+      mainWallet = nt.fromUserAccount;
+      break;
+    }
+    if (WATCHED_WALLETS.includes(nt.toUserAccount)) {
+      mainWallet = nt.toUserAccount;
+      break;
+    }
+  }
+}
+
+// Skip kalau wallet tidak dikenal
+if (!mainWallet) {
+  console.log("Skipped: wallet not in WATCHED_WALLETS");
+  continue;
+}
 
       // Cek SOL dari nativeTransfers
       for (const nt of nativeTransfers) {
