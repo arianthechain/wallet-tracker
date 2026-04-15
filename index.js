@@ -9,6 +9,13 @@ const CHANNEL_ID = process.env.CHANNEL_ID;
 console.log("BOT_TOKEN:", BOT_TOKEN ? "✅ Found" : "❌ Missing");
 console.log("CHANNEL_ID:", CHANNEL_ID ? "✅ Found" : "❌ Missing");
 
+// ===== CONFIG =====
+const MIN_SOL = 0.01; // minimum SOL untuk notif
+const WALLETS = process.env.WALLETS ? process.env.WALLETS.split(",") : [];
+
+// PnL tracker — simpan history beli per token per wallet
+const pnlTracker = {}; // { wallet_mint: { totalSOL, totalToken } }
+
 async function getTokenInfo(mint) {
   try {
     const res = await axios.get(
@@ -36,6 +43,13 @@ function formatUSD(num) {
   return `$${num.toFixed(2)}`;
 }
 
+function getPnLEmoji(pnl) {
+  if (pnl > 20) return "🚀";
+  if (pnl > 0) return "✅";
+  if (pnl < -20) return "💀";
+  return "🔻";
+}
+
 app.get("/", (req, res) => res.send("Wallet Tracker is running!"));
 
 app.post("/webhook", async (req, res) => {
@@ -59,7 +73,7 @@ app.post("/webhook", async (req, res) => {
       let tokenAmount = 0;
       let isBuy = false;
 
-      // Cari wallet utama dari tokenTransfers
+      // Cari wallet utama
       let mainWallet = wallet;
       for (const tt of transfers) {
         const isSOL = tt.mint === "So11111111111111111111111111111111111111112";
@@ -69,25 +83,23 @@ app.post("/webhook", async (req, res) => {
         }
       }
 
-     // Cek SOL dari nativeTransfers
-for (const nt of nativeTransfers) {
-  if (nt.fromUserAccount === mainWallet) solAmount += nt.amount / 1e9;
-}
+      // Cek SOL dari nativeTransfers
+      for (const nt of nativeTransfers) {
+        if (nt.fromUserAccount === mainWallet) solAmount += nt.amount / 1e9;
+      }
 
-// Cek SOL dari tokenTransfers (wrapped SOL)
-for (const tt of transfers) {
-  const isSOL = tt.mint === "So11111111111111111111111111111111111111112";
-  if (!isSOL) continue;
-  if (tt.fromUserAccount === mainWallet) solAmount += tt.tokenAmount;
-}
+      // Cek SOL dari wrapped SOL tokenTransfers
+      for (const tt of transfers) {
+        const isSOL = tt.mint === "So11111111111111111111111111111111111111112";
+        if (!isSOL) continue;
+        if (tt.fromUserAccount === mainWallet) solAmount += tt.tokenAmount;
+      }
 
-// Kalau masih 0, coba ambil dari semua nativeTransfers yang masuk ke DEX
-if (solAmount === 0) {
-  for (const nt of nativeTransfers) {
-    if (nt.fromUserAccount !== mainWallet && nt.toUserAccount !== mainWallet) continue;
-    if (nt.fromUserAccount === mainWallet) solAmount += nt.amount / 1e9;
-  }
-}
+      if (solAmount === 0) {
+        for (const nt of nativeTransfers) {
+          if (nt.fromUserAccount === mainWallet) solAmount += nt.amount / 1e9;
+        }
+      }
 
       // Cek token direction
       for (const tt of transfers) {
@@ -106,6 +118,12 @@ if (solAmount === 0) {
 
       if (!tokenMint) continue;
 
+      // ===== FILTER MINIMUM SOL =====
+      if (solAmount < MIN_SOL) {
+        console.log(`Skipped: SOL amount ${solAmount} below minimum ${MIN_SOL}`);
+        continue;
+      }
+
       const tokenInfo = await getTokenInfo(tokenMint);
       const tokenName = tokenInfo?.name || "Unknown";
       const tokenSymbol = tokenInfo?.symbol || "???";
@@ -120,23 +138,57 @@ if (solAmount === 0) {
       const solscanSOL = `https://solscan.io/token/So11111111111111111111111111111111111111112`;
       const solscanToken = `https://solscan.io/token/${tokenMint}`;
 
-      const emoji = isBuy ? "🟢" : "🟢";
-      const action = "SWAP";
+      // ===== PnL TRACKER =====
+      const pnlKey = `${mainWallet}_${tokenMint}`;
+      let pnlLine = "";
+      let sellPercentLine = "";
+
+      if (isBuy) {
+        // Simpan posisi beli
+        if (!pnlTracker[pnlKey]) {
+          pnlTracker[pnlKey] = { totalSOLSpent: 0, totalTokenBought: 0 };
+        }
+        pnlTracker[pnlKey].totalSOLSpent += solAmount;
+        pnlTracker[pnlKey].totalTokenBought += tokenAmount;
+        console.log(`BUY tracked: ${pnlKey} | SOL: ${pnlTracker[pnlKey].totalSOLSpent} | Token: ${pnlTracker[pnlKey].totalTokenBought}`);
+
+      } else {
+        // Hitung PnL saat SELL
+        if (pnlTracker[pnlKey]) {
+          const position = pnlTracker[pnlKey];
+          const avgBuyPrice = position.totalSOLSpent / position.totalTokenBought;
+          const currentPrice = solAmount / tokenAmount;
+          const pnlPercent = ((currentPrice - avgBuyPrice) / avgBuyPrice) * 100;
+          const pnlSOL = solAmount - (avgBuyPrice * tokenAmount);
+          const pnlEmoji = getPnLEmoji(pnlPercent);
+
+          // Sell % tracker
+          const sellPercent = (tokenAmount / position.totalTokenBought) * 100;
+          sellPercentLine = `\n📊 Sold: <b>${sellPercent.toFixed(1)}%</b> of position`;
+
+          pnlLine = `\n${pnlEmoji} PnL: <b>${pnlPercent >= 0 ? "+" : ""}${pnlPercent.toFixed(1)}%</b> (${pnlSOL >= 0 ? "+" : ""}${pnlSOL.toFixed(4)} SOL)`;
+
+          // Update sisa posisi
+          pnlTracker[pnlKey].totalTokenBought -= tokenAmount;
+          if (pnlTracker[pnlKey].totalTokenBought <= 0) {
+            delete pnlTracker[pnlKey]; // posisi habis
+          }
+        }
+      }
 
       const swapLine = isBuy
         ? `<a href="${solscanWallet}">${shortWallet}</a> swapped <b>${solAmount.toFixed(4)} <a href="${solscanSOL}">SOL</a></b> for <b>${tokenAmount.toLocaleString()} ($${tokenUSDValue}) <a href="${solscanToken}">${tokenName}</a></b> @$${tokenPrice.toFixed(6)}`
         : `<a href="${solscanWallet}">${shortWallet}</a> swapped <b>${tokenAmount.toLocaleString()} ($${tokenUSDValue}) <a href="${solscanToken}">${tokenName}</a></b> for <b>${solAmount.toFixed(4)} <a href="${solscanSOL}">SOL</a></b> @$${tokenPrice.toFixed(6)}`;
 
       const message =
-`${emoji} <a href="${solscanTx}"><b>${action} ${tokenName}</b></a> on ${dexName}
+`🟢 <a href="${solscanTx}"><b>SWAP ${tokenName}</b></a> on ${dexName}
 🔹 <a href="${solscanWallet}">${shortWallet}</a>
 
-🔹${swapLine}
+🔹${swapLine}${pnlLine}${sellPercentLine}
 
 💊 <b>#${tokenSymbol}</b> | MC: ${formatUSD(marketCap)} | <a href="https://birdeye.so/token/${tokenMint}?chain=solana">BE</a> | <a href="https://dexscreener.com/solana/${tokenMint}">DS</a> | <a href="https://photon-sol.tinyastro.io/en/r/@RayBot/${tokenMint}">PH</a> | <a href="https://neo.bullx.io/terminal?chainId=1399811149&address=${tokenMint}">Bullx</a> | <a href="https://gmgn.ai/sol/token/${tokenMint}">GMGN</a> | <a href="https://axiom.trade/t/${tokenMint}">AXI</a> | <a href="https://t.me/solana_notify_bot?start=t__${tokenMint}">👥INFO</a>
 <code>${tokenMint}</code>`;
 
-      // Inline buttons
       const inlineKeyboard = {
         inline_keyboard: [
           [
@@ -152,7 +204,7 @@ if (solAmount === 0) {
         ]
       };
 
-      console.log(`Sending ${action} message...`);
+      console.log(`Sending SWAP message for ${tokenName}...`);
 
       await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
         chat_id: CHANNEL_ID,
