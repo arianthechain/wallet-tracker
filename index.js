@@ -6,6 +6,8 @@ app.use(express.json());
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const CHANNEL_ID = process.env.CHANNEL_ID;
 const WATCHED_WALLETS = process.env.WATCHED_WALLETS
+  // Track processed signatures untuk hindari duplikat
+const processedTx = new Set();
   ? process.env.WATCHED_WALLETS.split(",").map(w => w.trim())
   : [];
 console.log("WATCHED_WALLETS:", WATCHED_WALLETS);
@@ -52,8 +54,18 @@ app.post("/webhook", async (req, res) => {
       const type = tx.type || "UNKNOWN";
       const signature = tx.signature || "";
 
-      console.log("TX type:", type);
-      if (type !== "SWAP") continue;
+     console.log("TX type:", type);
+if (type !== "SWAP") continue;
+
+// Skip kalau sudah diproses
+if (processedTx.has(signature)) {
+  console.log("Skipped duplicate TX:", signature.slice(0, 8));
+  continue;
+}
+processedTx.add(signature);
+
+// Bersihkan set kalau terlalu besar
+if (processedTx.size > 1000) processedTx.clear();
 
       const transfers = tx.tokenTransfers || [];
       const nativeTransfers = tx.nativeTransfers || [];
@@ -105,23 +117,24 @@ if (!mainWallet) {
   continue;
 }
 
-      // Cek SOL dari nativeTransfers
-      for (const nt of nativeTransfers) {
-        if (nt.fromUserAccount === mainWallet) solAmount += nt.amount / 1e9;
-      }
+      // Ambil SOL dari tokenTransfers (wrapped SOL) saja — lebih akurat
+for (const tt of transfers) {
+  const isSOL = tt.mint === "So11111111111111111111111111111111111111112";
+  if (!isSOL) continue;
+  if (isBuy && tt.fromUserAccount === mainWallet) {
+    solAmount += tt.tokenAmount;
+  } else if (!isBuy && tt.toUserAccount === mainWallet) {
+    solAmount += tt.tokenAmount;
+  }
+}
 
-      // Cek SOL dari wrapped SOL tokenTransfers
-      for (const tt of transfers) {
-        const isSOL = tt.mint === "So11111111111111111111111111111111111111112";
-        if (!isSOL) continue;
-        if (tt.fromUserAccount === mainWallet) solAmount += tt.tokenAmount;
-      }
-
-      if (solAmount === 0) {
-        for (const nt of nativeTransfers) {
-          if (nt.fromUserAccount === mainWallet) solAmount += nt.amount / 1e9;
-        }
-      }
+// Fallback ke nativeTransfers kalau SOL masih 0
+if (solAmount === 0) {
+  for (const nt of nativeTransfers) {
+    if (isBuy && nt.fromUserAccount === mainWallet) solAmount += nt.amount / 1e9;
+    else if (!isBuy && nt.toUserAccount === mainWallet) solAmount += nt.amount / 1e9;
+  }
+}
 
      // Cek token direction — jumlahkan semua transfer
 const tokenIn = {};  // mint -> total masuk
