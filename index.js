@@ -8,6 +8,16 @@ const CHANNEL_ID = process.env.CHANNEL_ID;
 const WATCHED_WALLETS = process.env.WATCHED_WALLETS
   ? process.env.WATCHED_WALLETS.split(",").map(function(w) { return w.trim(); })
   : [];
+const WALLET_LABELS = {};
+if (process.env.WALLET_LABELS) {
+  process.env.WALLET_LABELS.split(",").forEach(function(item) {
+    const parts = item.split("=");
+    if (parts.length === 2) {
+      WALLET_LABELS[parts[0].trim()] = parts[1].trim();
+    }
+  });
+}
+console.log("WALLET_LABELS:", WALLET_LABELS);
 
 const processedTx = new Set();
 
@@ -177,7 +187,7 @@ app.post("/webhook", async function(req, res) {
       const dexName = tokenInfo ? tokenInfo.dex.toUpperCase() : "DEX";
 
       const tokenUSDValue = (tokenAmount * tokenPrice).toFixed(2);
-      const shortWallet = mainWallet.slice(0, 6) + "..." + mainWallet.slice(-4);
+      const shortWallet = WALLET_LABELS[mainWallet] || mainWallet.slice(0, 6) + "..." + mainWallet.slice(-4);
       const solscanTx = "https://solscan.io/tx/" + signature;
       const solscanWallet = "https://solscan.io/account/" + mainWallet + "?exclude_amount_zero=true&remove_spam=true#transfers";
       const solscanSOL = "https://solscan.io/token/" + SOL_MINT;
